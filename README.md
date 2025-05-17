@@ -19,6 +19,24 @@ A modern, web-based database management solution designed specifically for airli
 - Date handling and formatting  
 - Responsive design for desktop and tablet devices  
 
+## Installation Requirements
+
+To install the required packages for this project, run the following commands:
+
+```bash
+# Core packages
+npm install react@18.2.0 react-dom@18.2.0
+
+# CodeMirror editor and SQL support
+npm install codemirror@6.0.1 @codemirror/lang-sql@6.8.0
+
+# Tree visualization for database schema
+npm install react-treebeard@3.2.4
+
+# Development environment
+npm install vite@6.3.5 --save-dev
+```
+
 ## Installation
 
 ```bash

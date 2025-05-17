@@ -5,7 +5,7 @@
 ![PostgreSQL](https://img.shields.io/badge/PostgreSQL-316192?style=for-the-badge&logo=postgresql&logoColor=white)
 
 ## Overview
-A modern, web-based database management solution designed specifically for airline operations. This application provides an intuitive interface for database administrators and operations staff to interact with airline databases through SQL queries.
+A modern, web-based database management solution designed specifically for airline operations. This application provides an intuitive interface for database administrators and operations staff to interact with airline databases through SQL queries, with specific support for PostgreSQL syntax and features. The system leverages PostgreSQL's robust querying capabilities, including its advanced functions and operators, to enable comprehensive airline data management.
 
 ## Features
 - Interactive SQL Editor with syntax highlighting and auto-formatting  

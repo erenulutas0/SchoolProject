@@ -13,6 +13,7 @@ Advanced filtering with WHERE and HAVING clauses
 String functions (UPPER, LOWER)
 Date handling and formatting
 Responsive design for desktop and tablet devices
+
 # Clone the repository
 git clone https://github.com/erenulutas0/SchoolProject.git
 
@@ -24,11 +25,15 @@ npm install
 
 # Start the development server
 npm run dev
+
+
 Usage
 Upload your SQL database file using the "+" button in the sidebar
 Browse schema tree view to explore tables and their structures
 Write SQL queries in the editor
 Click "EXECUTE" to run your query and view results
+
+
 Example Queries
 -- Simple SELECT query
 SELECT * FROM flights WHERE departure_date > NOW();

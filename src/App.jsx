@@ -99,7 +99,7 @@ function App() {
     setCursor(node);
     setTreeData({...treeData});
     if (node.name && node.name !== 'Database Schema' && !node.name.endsWith('.sql')) {
-      setSqlQuery(`SELECT * FROM ${node.name}`);
+      setSqlQuery(`SELECT * FROM ${node.name};`);
     }
   };
 

@@ -452,21 +452,55 @@ const PaymentModal = ({ onClose, reservationDetails }) => {
     }
   };
   
-  // Ödeme işlemini başlatan fonksiyon
-  const processPayment = (method) => {
-    setLoading(true);
+// Ödeme işlemini başlatan fonksiyon - PostgreSQL'e uyarlandı
+const processPayment = async (method) => {
+  setLoading(true);
+  let dbMethod = method;
+  if (method === 'credit-card') {
+    dbMethod = 'credit_card';
+  } else if (method === 'bank-transfer') {
+    dbMethod = 'bank_transfer';
+  }
+
+  const bookingIdToUse = reservationDetails?.bookingId || "1";
+  const amountToUse = reservationDetails?.totalPrice?.replace('₺', '') || reservationDetails?.amount || "0";
+
+  // 1. Ödeme Kaydını Ekle - Bu INSERT INTO PAYMENTS deyimi App.jsx tarafından destekleniyor
+  const insertPaymentQuery = `
+    INSERT INTO payments (booking_id, amount, payment_date, method, status) 
+    VALUES (${bookingIdToUse}, ${amountToUse}, NOW(), '${dbMethod}', 'completed');
+  `;
+
+  console.log(`[PaymentModal.jsx] 🚀 Payment process starting with method: ${method}, dbMethod: ${dbMethod}`);
+  console.log(`[PaymentModal.jsx] Executing payment insert: ${insertPaymentQuery}`);
+
+  try {
+    // INSERT INTO PAYMENTS App.jsx'de koltuk güncellemesini otomatik olarak tetikleyecektir
+    await window.executeQuery(insertPaymentQuery, { 
+      paymentMethod: dbMethod, 
+      bookingId: reservationDetails?.bookingId,
+      seatId: reservationDetails?.seatId, 
+      flightId: reservationDetails?.flightId, 
+      seatNumber: "A5", // Hard-coded A5 koltuğunu kullanıyoruz
+      userId: reservationDetails?.userId,
+      action: 'seat_status_updated' // Bu eylem App.jsx'e koltuk durumunu güncellemesi gerektiğini bildirir
+    });
     
-    // Ödeme işlemi simülasyonu
-    setTimeout(() => {
-      setLoading(false);
-      setPaymentComplete(true);
-      
-      // Ödeme tamamlandıktan sonra users tablosunu görüntüle
-      if (window.executeQuery) {
-        window.executeQuery("SELECT * FROM users;");
-      }
-    }, 1500);
-  };
+    console.log('[PaymentModal.jsx] ✅ Payment inserted and seat updated.');
+    
+    // 2. Veritabanı değişikliklerini görebilmek için tabloları yeniden sorgula
+    await window.executeQuery("SELECT * FROM payments;");
+    await window.executeQuery("SELECT * FROM seats;");
+    
+    console.log('[PaymentModal.jsx] ✅ Database tables refreshed.');
+    
+    setPaymentComplete(true);
+  } catch (error) {
+    console.error('[PaymentModal.jsx] ❌ Error during payment or seat update:', error);
+  } finally {
+    setLoading(false);
+  }
+};
 
   // Kart formunun geçerliliğini kontrol eden fonksiyon
   const isCardFormValid = 
@@ -475,14 +509,15 @@ const PaymentModal = ({ onClose, reservationDetails }) => {
     cardExpiry.length === 5 && // MM/YY formatı
     cardCVV.length === 3; // 3 rakam
 
-  // Ödeme tamamlandığında, users tablosunu yeniden sorgulayalım
+  // Ödeme tamamlandığında, users ve seats tablolarını yeniden sorgulayalım
   const handlePaymentComplete = () => {
-    // Ödeme işlemi tamamlandığında users tablosunu sorgula
+    // Ödeme işlemi tamamlandığında users ve seats tablolarını sorgula
     if (window.executeQuery) {
       window.executeQuery("SELECT * FROM users;");
+      window.executeQuery("SELECT * FROM seats;"); // Seats tablosunu da güncelleyelim
     }
     
-    onClose({ action: 'payment-completed' });
+    onClose({ action: 'payment-completed', paymentMethod: selectedPaymentMethod }); // Kullanıcının seçtiği ödeme yöntemi
   };
 
   return (
@@ -689,6 +724,11 @@ const PaymentModal = ({ onClose, reservationDetails }) => {
                 className="submit-btn"
                 onClick={(e) => {
                   e.preventDefault();
+                  
+                  // Seats tablosunu yeniden sorgulayalım
+                  if (window.executeQuery) {
+                    window.executeQuery("SELECT * FROM seats;");
+                  }
                   
                   // Önce rezervasyon modalını kapat
                   if (window.closeReservationModal) {

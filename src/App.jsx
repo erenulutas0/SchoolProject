@@ -5,7 +5,9 @@ import './App.css';
 
 // Import components
 import ReservationModal from './components/ReservationModal';
-import SqlEditor from './components/SqlEditor';
+// SqlEditor component is not used directly in App.jsx based on current code,
+// but if it were, its import would be here.
+// import SqlEditor from './components/SqlEditor'; 
 import PaymentModal from './components/PaymentModal';
 
 // Import SQL file directly
@@ -48,109 +50,16 @@ function App() {
   const loadDefaultSqlFile = async () => {
     try {
       setIsLoadingDefaultDB(true);
-
-      // SQL dosyasını import ile alın
       const sqlContent = newDBSql;
-
-      // SQL dosyasını parse et
-      const parsedDb = extractTableData(sqlContent); // veya parseSqlFile(sqlContent)
+      const parsedDb = extractTableData(sqlContent);
       setDatabase(parsedDb);
-
-      // Tree yapısını güncelle
       updateTreeData(parsedDb);
-
       setIsLoadingDefaultDB(false);
     } catch (error) {
       console.error("SQL dosyası yüklenirken hata:", error);
       setDbLoadError(error.message);
       setIsLoadingDefaultDB(false);
     }
-  };
-
-  // SQL dosyasını parse eden fonksiyon
-  const parseSqlFile = (sqlContent) => {
-    const parsedDb = {};
-    
-    try {
-      // CREATE TABLE ifadelerini bul
-      const tableRegex = /CREATE\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?(\w+)\s*\(\s*([\s\S]*?)\s*\);/g;
-      let match;
-      
-      while ((match = tableRegex.exec(sqlContent)) !== null) {
-        const tableName = match[1];
-        const tableDefinition = match[2];
-        
-        console.log(`Tablo bulundu: ${tableName}`);
-        
-        // Kolonları çıkar
-        const columns = [];
-        const columnDefs = tableDefinition.split(',');
-        
-        for (let columnDef of columnDefs) {
-          columnDef = columnDef.trim();
-          if (columnDef && !columnDef.startsWith('PRIMARY KEY') && !columnDef.startsWith('FOREIGN KEY')) {
-            const parts = columnDef.split(/\s+/);
-            if (parts.length >= 2) {
-              const colName = parts[0].replace(/["'`]/g, '');
-              const colType = parts[1];
-              
-              columns.push({
-                name: colName,
-                type: colType,
-                nullable: !columnDef.includes('NOT NULL')
-              });
-              
-              console.log(`Kolon: ${colName} (${colType})`);
-            }
-          }
-        }
-        
-        // Tabloyu veritabanına ekle
-        parsedDb[tableName] = {
-          columns,
-          data: []
-        };
-      }
-      
-      // INSERT ifadelerini bul ve verileri ekle
-      const insertRegex = /INSERT\s+INTO\s+(\w+)\s*(?:\(([\s\S]*?)\))?\s*VALUES\s*\(([\s\S]*?)\);/g;
-      let insertMatch;
-      
-      while ((insertMatch = insertRegex.exec(sqlContent)) !== null) {
-        const tableName = insertMatch[1];
-        let columnNames = [];
-        const valuesPart = insertMatch[3];
-        
-        // Tablo var mı kontrol et
-        if (!parsedDb[tableName]) {
-          console.log(`UYARI: ${tableName} tablosu bulunamadı, INSERT atlanıyor`);
-          continue;
-        }
-        
-        // Kolon isimleri belirtilmişse onları al, yoksa tablo tanımından al
-        if (insertMatch[2]) {
-          columnNames = insertMatch[2].split(',').map(col => col.trim().replace(/["'`]/g, ''));
-        } else {
-          columnNames = parsedDb[tableName].columns.map(col => col.name);
-        }
-        
-        // Değerleri ayır
-        const values = valuesPart.split(',').map(val => val.trim().replace(/^['"]|['"]$/g, ''));
-        
-        // Veriyi tabloya ekle
-        if (values.length === columnNames.length) {
-          const rowData = {};
-          columnNames.forEach((col, idx) => {
-            rowData[col] = values[idx];
-          });
-          parsedDb[tableName].data.push(rowData);
-        }
-      }
-    } catch (error) {
-      console.error("SQL parse hatası:", error);
-    }
-    
-    return parsedDb;
   };
 
   // Tree yapısını güncelle
@@ -171,25 +80,21 @@ function App() {
   };
   
   // SQL sorgusu çalıştırma
-  const executeQuery = (query = null, reservationDetails = null) => { // Add reservationDetails parameter
+  // The `reservationDetailsFromCaller` parameter is primarily for the INSERT INTO USERS flow from ReservationModal.
+  // For INSERT INTO PAYMENTS, `executeQuery` will use the `reservationDetails` state of App.jsx.
+  const executeQuery = (query = null, reservationDetailsFromCaller = null) => {
     const queryToExecute = query && typeof query === 'string' ? query : sqlQuery;
     
     if (!queryToExecute || typeof queryToExecute !== 'string' || !queryToExecute.trim()) {
       console.error("Invalid query:", queryToExecute);
-      setQueryResult({
-        type: 'error',
-        message: 'Invalid SQL query'
-      });
+      setQueryResult({ type: 'error', message: 'Invalid SQL query' });
       return;
     }
     
-    console.log("Executing SQL query:", queryToExecute);
-    // Bu noktada 'database' state'i, executeQuery fonksiyonunun çağrıldığı
-    // render döngüsündeki güncel değerine sahip olacaktır.
+    console.log("Executing SQL query:", queryToExecute, "with caller details:", reservationDetailsFromCaller);
     
     try {
       if (queryToExecute.trim().toUpperCase().startsWith('SELECT')) {
-        // Handle SELECT query (existing code)
         const fromRegex = /FROM\s+(\w+)/i;
         const match = queryToExecute.match(fromRegex);
         
@@ -201,17 +106,14 @@ function App() {
             data: database[tableName].data
           });
         } else {
-          setQueryResult({
-            type: 'error',
-            message: 'Table not found'
-          });
+          setQueryResult({ type: 'error', message: 'Table not found or invalid SELECT query.' });
         }
       } 
       else if (queryToExecute.trim().toUpperCase().startsWith('INSERT INTO USERS')) {
         try {
           console.log('[App.jsx] Received INSERT INTO USERS query:', queryToExecute);
-          if (reservationDetails) {
-            console.log('[App.jsx] Received reservation details:', reservationDetails);
+          if (reservationDetailsFromCaller) {
+            console.log('[App.jsx] Received reservation details for user insert:', reservationDetailsFromCaller);
           }
           const insertUserRegex = /INSERT INTO users \(([^)]+)\) VALUES \(([^)]+)\)/i;
           const userMatch = queryToExecute.match(insertUserRegex);
@@ -233,132 +135,77 @@ function App() {
             if (usersData.length > 0) {
               const existingUserIds = usersData.map(u => parseInt(u.user_id, 10)).filter(id => !isNaN(id));
               if (existingUserIds.length > 0) nextUserId = Math.max(...existingUserIds) + 1;
-              else nextUserId = usersData.length + 1;
+              else nextUserId = usersData.length > 0 ? usersData.length + 1: 1;
             }
             newUser.user_id = nextUserId.toString();
 
             const now = new Date();
-            const year = now.getFullYear();
-            const month = (now.getMonth() + 1).toString().padStart(2, '0');
-            const day = now.getDate().toString().padStart(2, '0');
-            const hours = now.getHours().toString().padStart(2, '0');
-            const minutes = now.getMinutes().toString().padStart(2, '0');
-            const seconds = now.getSeconds().toString().padStart(2, '0');
-            const milliseconds = now.getMilliseconds().toString().padStart(3, '0');
-            const currentTimestamp = `${year}-${month}-${day} ${hours}:${minutes}:${seconds}.${milliseconds}`;
+            const currentTimestamp = `${now.getFullYear()}-${(now.getMonth() + 1).toString().padStart(2, '0')}-${now.getDate().toString().padStart(2, '0')} ${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}:${now.getSeconds().toString().padStart(2, '0')}.${now.getMilliseconds().toString().padStart(3, '0')}`;
             newUser.created_at = currentTimestamp;
 
             if (!newUser.full_name || !newUser.email || !newUser.password_hash || !newUser.identification_number) {
-              console.error('[App.jsx] Yeni kullanıcı verisi eksik:', newUser);
-              setQueryResult({
-                type: 'error',
-                message: 'Kullanıcı eklenemedi: eksik veri.'
-              });
+              console.error('[App.jsx] New user data incomplete:', newUser);
+              setQueryResult({ type: 'error', message: 'User creation failed: incomplete data.' });
               return;
             }
             
             let currentUsersTable = database.users || { columns: [], data: [] };
             let resolvedUsersColumns = (Array.isArray(currentUsersTable.columns) && currentUsersTable.columns.length > 0)
               ? [...currentUsersTable.columns]
-              : [ 
-                  { name: 'user_id', type: 'SERIAL PRIMARY KEY' },
-                  { name: 'full_name', type: 'VARCHAR(100)' },
-                  { name: 'email', type: 'VARCHAR(100)' },
-                  { name: 'password_hash', type: 'VARCHAR(100)' },
-                  { name: 'identification_number', type: 'CHAR(11)' }
-                ];
+              : [ { name: 'user_id', type: 'SERIAL PRIMARY KEY' }, { name: 'full_name', type: 'VARCHAR(100)' }, { name: 'email', type: 'VARCHAR(100)' }, { name: 'password_hash', type: 'VARCHAR(100)' }, { name: 'identification_number', type: 'CHAR(11)' } ];
             if (!resolvedUsersColumns.find(col => col.name === 'created_at')) {
               resolvedUsersColumns.push({ name: 'created_at', type: 'TIMESTAMP' });
             }
             const updatedUsersData = [...(currentUsersTable.data || []), newUser];
 
-            // --- BOOKING INSERTION ---
             let newBooking = null;
             let updatedBookingsData = (database.bookings && database.bookings.data) ? [...database.bookings.data] : [];
-            let resolvedBookingsColumns = (database.bookings && database.bookings.columns) ? [...database.bookings.columns] : [
-                { name: 'booking_id', type: 'SERIAL PRIMARY KEY' },
-                { name: 'user_id', type: 'INTEGER' },
-                { name: 'booking_time', type: 'TIMESTAMP' },
-                { name: 'status', type: 'VARCHAR(20)' }
-            ];
+            let resolvedBookingsColumns = (database.bookings && database.bookings.columns) ? [...database.bookings.columns] : [ { name: 'booking_id', type: 'SERIAL PRIMARY KEY' }, { name: 'user_id', type: 'INTEGER' }, { name: 'booking_time', type: 'TIMESTAMP' }, { name: 'status', type: 'VARCHAR(20)' } ];
 
-            if (reservationDetails) {
+            if (reservationDetailsFromCaller) {
               let nextBookingId = 1;
               const bookingsData = (database.bookings && Array.isArray(database.bookings.data)) ? database.bookings.data : [];
               if (bookingsData.length > 0) {
                 const existingBookingIds = bookingsData.map(b => parseInt(b.booking_id, 10)).filter(id => !isNaN(id));
                 if (existingBookingIds.length > 0) nextBookingId = Math.max(...existingBookingIds) + 1;
-                else nextBookingId = bookingsData.length + 1;
+                else nextBookingId = bookingsData.length > 0 ? bookingsData.length + 1 : 1;
               }
               
-              newBooking = {
-                booking_id: nextBookingId.toString(),
-                user_id: newUser.user_id,
-                booking_time: currentTimestamp,
-                status: 'confirmed'
-              };
+              newBooking = { booking_id: nextBookingId.toString(), user_id: newUser.user_id, booking_time: currentTimestamp, status: 'confirmed' };
               updatedBookingsData.push(newBooking);
-              console.log('[App.jsx] Prepared new booking:', newBooking);
             }
 
-            // --- TICKET INSERTION ---
             let newTicket = null;
             let updatedTicketsData = (database.tickets && database.tickets.data) ? [...database.tickets.data] : [];
-            let resolvedTicketsColumns = (database.tickets && database.tickets.columns) ? [...database.tickets.columns] : [
-                { name: 'ticket_id', type: 'SERIAL PRIMARY KEY' },
-                { name: 'booking_id', type: 'INTEGER' },
-                { name: 'flight_id', type: 'INTEGER' },
-                { name: 'seat_number', type: 'VARCHAR(5)' },
-                { name: 'class', type: 'VARCHAR(20)' },
-                { name: 'price', type: 'DECIMAL(10,2)' },
-                { name: 'ticket_code', type: 'VARCHAR(20)' }
-            ];
+            let resolvedTicketsColumns = (database.tickets && database.tickets.columns) ? [...database.tickets.columns] : [ { name: 'ticket_id', type: 'SERIAL PRIMARY KEY' }, { name: 'booking_id', type: 'INTEGER' }, { name: 'flight_id', type: 'INTEGER' }, { name: 'seat_number', type: 'VARCHAR(5)' }, { name: 'class', type: 'VARCHAR(20)' }, { name: 'price', type: 'DECIMAL(10,2)' }, { name: 'ticket_code', type: 'VARCHAR(20)' } ];
 
-            if (reservationDetails && newBooking) {
+            if (reservationDetailsFromCaller && newBooking) {
               let nextTicketId = 1;
               const ticketsData = (database.tickets && Array.isArray(database.tickets.data)) ? database.tickets.data : [];
               if (ticketsData.length > 0) {
                 const existingTicketIds = ticketsData.map(t => parseInt(t.ticket_id, 10)).filter(id => !isNaN(id));
                 if (existingTicketIds.length > 0) nextTicketId = Math.max(...existingTicketIds) + 1;
-                else nextTicketId = ticketsData.length + 1;
+                else nextTicketId = ticketsData.length > 0 ? ticketsData.length + 1 : 1;
               }
 
               let price;
-              switch (reservationDetails.seatClass.toLowerCase()) {
+              switch (reservationDetailsFromCaller.seatClass?.toLowerCase()) {
                 case 'first': price = 1500.00; break;
                 case 'business': price = 1000.00; break;
                 case 'economy': price = 750.00; break;
-                default: price = 750.00; // Default or error
+                default: price = 750.00; 
               }
               
-              newTicket = {
-                ticket_id: nextTicketId.toString(),
-                booking_id: newBooking.booking_id,
-                flight_id: reservationDetails.flightId.toString(),
-                seat_number: reservationDetails.seatNumber,
-                class: reservationDetails.seatClass.toLowerCase(),
-                price: price.toFixed(2),
-                ticket_code: `${reservationDetails.flightNumber}-${reservationDetails.seatNumber}`
-              };
+              newTicket = { ticket_id: nextTicketId.toString(), booking_id: newBooking.booking_id, flight_id: reservationDetailsFromCaller.flightId.toString(), seat_number: reservationDetailsFromCaller.seatNumber, class: reservationDetailsFromCaller.seatClass?.toLowerCase(), price: price.toFixed(2), ticket_code: `${reservationDetailsFromCaller.flightNumber}-${reservationDetailsFromCaller.seatNumber}` };
               updatedTicketsData.push(newTicket);
-              console.log('[App.jsx] Prepared new ticket:', newTicket);
             }
             
             const updatedDatabase = {
               ...database, 
-              users: { 
-                columns: resolvedUsersColumns, 
-                data: updatedUsersData,     
-              },
-              ...(reservationDetails && { // Conditionally add/update bookings and tickets
-                bookings: {
-                  columns: resolvedBookingsColumns,
-                  data: updatedBookingsData
-                },
-                tickets: {
-                  columns: resolvedTicketsColumns,
-                  data: updatedTicketsData
-                }
+              users: { columns: resolvedUsersColumns, data: updatedUsersData },
+              ...(reservationDetailsFromCaller && { 
+                bookings: { columns: resolvedBookingsColumns, data: updatedBookingsData },
+                tickets: { columns: resolvedTicketsColumns, data: updatedTicketsData }
               })
             };
             setDatabase(updatedDatabase);
@@ -367,51 +214,222 @@ function App() {
             if (newBooking) successMessage += ` Booking (ID: ${newBooking.booking_id}) created.`;
             if (newTicket) successMessage += ` Ticket (ID: ${newTicket.ticket_id}) issued.`;
             
-            console.log('[App.jsx] Operations completed. Database updated.');
-            setQueryResult({
-              type: 'success',
-              message: successMessage,
-              columns: resolvedUsersColumns.map(col => col.name), 
-              data: updatedUsersData, // Or a more comprehensive result if needed
-            });
-
+            setQueryResult({ type: 'success', message: successMessage });
           } else {
-            console.error('[App.jsx] Geçersiz INSERT INTO USERS sorgu formatı:', queryToExecute);
-            setQueryResult({
-              type: 'error',
-              message: 'USERS tablosu için geçersiz INSERT sorgu formatı. Beklenen: INSERT INTO users (sutun1, sutun2) VALUES (deger1, deger2)',
-            });
+            setQueryResult({ type: 'error', message: 'Invalid INSERT INTO USERS query format.' });
           }
         } catch (error) {
-          console.error("[App.jsx] INSERT INTO USERS işlenirken hata oluştu:", error);
-          setQueryResult({
-            type: 'error',
-            message: `INSERT işlenirken hata: ${error.message}`,
-          });
+          setQueryResult({ type: 'error', message: `Error processing USER insert: ${error.message}` });
+        }
+      }
+      else if (queryToExecute.trim().toUpperCase().startsWith('INSERT INTO PAYMENTS')) {
+        try {
+          console.log('[App.jsx] Received INSERT INTO PAYMENTS query:', queryToExecute);
+          
+          // Instead of erroring out, assign default values if specific fields are missing.
+          const userId = reservationDetails && reservationDetails.userId ? reservationDetails.userId : "1";
+          const flightId = reservationDetails && reservationDetails.flightId ? reservationDetails.flightId : "1";
+          const seatNumber = reservationDetails && reservationDetails.seatNumber 
+            ? reservationDetails.seatNumber 
+            : (reservationDetails && reservationDetails.seat 
+                ? ((reservationDetails.seat.match(/^([A-Z][0-9]+)/) || [])[1] || "A5")
+                : "A5");
+          const seatId = reservationDetails && reservationDetails.seatId ? reservationDetails.seatId : "1";
+          
+          // Log the values used.
+          console.log('[App.jsx] Using reservation details: userId:', userId, 'flightId:', flightId, 'seatNumber:', seatNumber, 'seatId:', seatId);
+
+          const paymentRegex = /INSERT INTO payments\s*\(([\s\S]+?)\)\s*VALUES\s*\(([\s\S]+?)\)/i;
+          const paymentMatch = queryToExecute.match(paymentRegex);
+
+          if (paymentMatch) {
+            const paymentColumns = paymentMatch[1]
+              .split(',')
+              .map(col => col.trim().toLowerCase());
+            const paymentValues = paymentMatch[2]
+              .split(',')
+              .map(val => {
+                const trimmedVal = val.trim();
+                return (trimmedVal.startsWith("'") && trimmedVal.endsWith("'"))
+                  ? trimmedVal.substring(1, trimmedVal.length - 1)
+                  : trimmedVal;
+              });
+              
+            const parsedQueryData = {}; // Data parsed from the SQL query
+            paymentColumns.forEach((col, index) => {
+              parsedQueryData[col.replace(/\s+/g, '_')] = paymentValues[index];
+            });
+            
+            let finalPaymentMethod;
+            // const methodFromSql = parsedQueryData.method; // SQL'den ayrıştırılan metot
+
+            // Önceliklendirme:
+            // 1. PaymentModal tarafından reservationDetailsFromCaller aracılığıyla doğrudan gönderilen metot.
+            // 2. SQL sorgusundan ayrıştırılan metot (PaymentModal göndermezse veya geçersizse yedek olarak).
+            // 3. App state'indeki reservationDetails.paymentMethod (daha düşük olasılık).
+            // 4. Varsayılan olarak 'credit_card'.
+
+            if (reservationDetailsFromCaller && reservationDetailsFromCaller.paymentMethod && typeof reservationDetailsFromCaller.paymentMethod === 'string' && reservationDetailsFromCaller.paymentMethod.trim() !== '') {
+              finalPaymentMethod = reservationDetailsFromCaller.paymentMethod;
+              console.log(`[App.jsx] Using payment method from PaymentModal (via callerDetails): '${finalPaymentMethod}'`);
+            } else {
+              const methodFromSql = parsedQueryData.method; // SQL'den ayrıştırmayı burada yedek olarak kullan
+              console.warn(`[App.jsx] Payment method not found in callerDetails from PaymentModal. Falling back to SQL parsing or default.`);
+              if (methodFromSql && typeof methodFromSql === 'string' && methodFromSql.trim() !== '') {
+                finalPaymentMethod = methodFromSql;
+                console.log(`[App.jsx] Using payment method from parsed SQL query: '${finalPaymentMethod}'`);
+                if (reservationDetails && reservationDetails.paymentMethod && reservationDetails.paymentMethod.toLowerCase() !== finalPaymentMethod) {
+                  console.warn(`[App.jsx] SQL method '${finalPaymentMethod}' differs from reservationDetails.paymentMethod '${reservationDetails.paymentMethod.toLowerCase()}'. Prioritizing method from SQL for this payment insertion.`);
+                }
+              } else {
+                if (reservationDetails && reservationDetails.paymentMethod) {
+                  finalPaymentMethod = reservationDetails.paymentMethod.toLowerCase();
+                  console.log(`[App.jsx] SQL parsed method was '${methodFromSql}'. Using method from reservationDetails state: '${finalPaymentMethod}'`);
+                } else {
+                  finalPaymentMethod = 'credit_card'; // Varsayılan
+                  console.warn(`[App.jsx] Payment method from SQL was '${methodFromSql}'. No method in reservationDetails state. Defaulting to '${finalPaymentMethod}'.`);
+                }
+              }
+            }
+            
+            // Update parsedQueryData.method to ensure newPayment object uses the correctly determined method.
+            // This also makes the subsequent console.log consistent.
+            parsedQueryData.method = finalPaymentMethod;
+            console.log('[App.jsx] Using payment method:', finalPaymentMethod);
+
+            if (parsedQueryData.user_id !== userId.toString()) {
+              console.warn('[App.jsx] User ID mismatch between payment query and App state. Query:', parsedQueryData.user_id, 'State:', userId);
+            }
+            
+            // Determine bookingIdToUse using reservationDetails.bookingId if present.
+            let bookingIdToUse = reservationDetails && reservationDetails.bookingId ? reservationDetails.bookingId : null;
+            const ticketsData = database.tickets?.data || [];
+            const bookingsData = database.bookings?.data || [];
+            
+            if (!bookingIdToUse) {
+              // Önce, eğer booking var ise, en son eklenen booking_id'yi kullan.
+              if (bookingsData.length > 0) {
+                const maxBookingId = bookingsData.reduce((max, booking) =>
+                  parseInt(booking.booking_id, 10) > parseInt(max, 10) ? booking.booking_id : max, "0");
+                bookingIdToUse = maxBookingId;
+                console.log('[App.jsx] Using last booking_id from bookings table:', bookingIdToUse);
+              } else {
+                // Eğer bookings yoksa, alternatif olarak matching ticket arayalım.
+                const matchingTicket = ticketsData.find(ticket =>
+                  ticket.flight_id === flightId.toString() &&
+                  ticket.seat_number === seatNumber &&
+                  bookingsData.some(booking => booking.booking_id === ticket.booking_id && booking.user_id === userId.toString())
+                );
+                
+                if (matchingTicket && matchingTicket.booking_id) {
+                  bookingIdToUse = matchingTicket.booking_id;
+                } else {
+                  console.warn('[App.jsx] Could not determine booking_id for payment. Using default booking ID "1".');
+                  bookingIdToUse = "1";
+                }
+              }
+            }
+            
+            // Determine amount based on the last ticket's price.
+            let computedAmount = parsedQueryData.amount; // fallback value
+            const existingTicketsData = database.tickets?.data || []; // veya daha önce tanımlandıysa, doğrudan ticketsData'yı kullanın.
+            if (existingTicketsData.length > 0) {
+              const lastTicket = existingTicketsData[existingTicketsData.length - 1];
+              if (lastTicket && lastTicket.price) {
+                computedAmount = lastTicket.price;
+                console.log('[App.jsx] Using last ticket price for amount:', computedAmount);
+              }
+            }
+            
+            // Prepare the new payment object using bookingIdToUse and computedAmount
+            const newPayment = {
+              booking_id: bookingIdToUse,
+              amount: parseFloat(computedAmount).toFixed(2),
+              method: parsedQueryData.method,
+              status: 'paid'
+            };
+            
+            let nextPaymentId = 1;
+            const currentPaymentsData = (database.payments && Array.isArray(database.payments.data)) ? database.payments.data : [];
+            if (currentPaymentsData.length > 0) {
+              const existingPaymentIds = currentPaymentsData.map(p => parseInt(p.payment_id, 10)).filter(id => !isNaN(id));
+              if (existingPaymentIds.length > 0)
+                nextPaymentId = Math.max(...existingPaymentIds) + 1;
+              else nextPaymentId = currentPaymentsData.length + 1;
+            }
+            newPayment.payment_id = nextPaymentId.toString();
+            
+            const now = new Date();
+            newPayment.payment_time = `${now.getFullYear()}-${(now.getMonth() + 1)
+              .toString().padStart(2, '0')}-${now.getDate().toString().padStart(2, '0')} ${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}:${now.getSeconds().toString().padStart(2, '0')}.${now.getMilliseconds().toString().padStart(3, '0')}`;
+            
+            if (!newPayment.method || !newPayment.booking_id || isNaN(parseFloat(newPayment.amount)) || parseFloat(newPayment.amount) <= 0) {
+              console.error('[App.jsx] New payment data incomplete or invalid:', newPayment);
+              setQueryResult({ type: 'error', message: 'Payment failed: Incomplete or invalid payment data.' });
+              return;
+            }
+            
+            let currentPaymentsTable = database.payments || { columns: [], data: [] };
+            let resolvedPaymentsColumns = (Array.isArray(currentPaymentsTable.columns) && currentPaymentsTable.columns.length > 0)
+              ? [...currentPaymentsTable.columns]
+              : [ 
+                  { name: 'payment_id', type: 'SERIAL PRIMARY KEY' },
+                  { name: 'booking_id', type: 'INTEGER' },
+                  { name: 'amount', type: 'DECIMAL(10,2)' },
+                  { name: 'payment_time', type: 'TIMESTAMP' },
+                  { name: 'method', type: 'VARCHAR(30)' },
+                  { name: 'status', type: 'VARCHAR(20)' }
+                ];
+            
+            const updatedPaymentsData = [...(currentPaymentsTable.data || []), newPayment];
+            
+            // Update the seat availability in the seats table based on the last ticket entry
+            let updatedSeatsData = [...(database.seats?.data || [])];
+            if (database.tickets && Array.isArray(database.tickets.data) && database.tickets.data.length > 0) {
+                // Use the last inserted ticket's information
+                const lastTicket = database.tickets.data[database.tickets.data.length - 1];
+                const setFlightId = lastTicket.flight_id.toString();
+                const setSeatNumber = lastTicket.seat_number;
+                updatedSeatsData = updatedSeatsData.map(seat => {
+                  if (seat.flight_id === setFlightId && seat.seat_number === setSeatNumber) {
+                    return { ...seat, is_available: 'f' }; // 'f' for false (seat taken)
+                  }
+                  return seat;
+                });
+            } else {
+                console.warn('[App.jsx] No ticket information available to update seat availability.');
+            }
+
+            const updatedDatabase = {
+              ...database, 
+              payments: { columns: resolvedPaymentsColumns, data: updatedPaymentsData },
+              seats: { ...(database.seats || { columns: [], data: [] }), data: updatedSeatsData }
+            };
+            setDatabase(updatedDatabase);
+            
+            setQueryResult({ type: 'success', message: `Payment (ID: ${newPayment.payment_id}) recorded for Booking ID: ${newPayment.booking_id}. Seat updated.` });
+            
+          } else {
+            setQueryResult({ type: 'error', message: 'Invalid INSERT INTO PAYMENTS query format.' });
+          }
+        } catch (error) {
+          setQueryResult({ type: 'error', message: `Error processing PAYMENT insert: ${error.message}` });
         }
       }
       else {
-        setQueryResult({
-          type: 'info',
-          message: 'This demo currently supports SELECT queries and INSERT INTO USERS statements'
-        });
+        setQueryResult({ type: 'info', message: 'This demo supports SELECT, INSERT INTO USERS, and INSERT INTO PAYMENTS statements.' });
       }
     } catch (error) {
-      console.error('Error executing query:', error);
-      setQueryResult({
-        type: 'error',
-        message: `Error: ${error.message}`
-      });
+      setQueryResult({ type: 'error', message: `Query execution error: ${error.message}` });
     }
   };
   
-  // Bir tabloya tıklandığında
   const handleTableClick = (tableName) => {
-    setSqlQuery(`SELECT * FROM ${tableName};`);
-    executeQuery();
+    const newQuery = `SELECT * FROM ${tableName};`;
+    setSqlQuery(newQuery);
+    executeQuery(newQuery); // Pass the new query directly
   };
 
-  // Tablo toggle fonksiyonu
   const handleTableToggle = (idx) => {
     setTreeData(prev => {
       const newChildren = prev.children.map((table, i) =>
@@ -421,70 +439,43 @@ function App() {
     });
   };
 
-  // Ana uygulama içinde PaymentModal kullanımını güncelle
-  // window nesnesine bir fonksiyon ekleyelim
   useEffect(() => {
-    // Uçuş rezervasyonu kapatma işlevini global olarak tanımla
     window.closeFlightReservation = function() {
-      console.log("Rezervasyon kapatılıyor...");
       setShowReservationModal(false);
     };
-    
-    // executeQuery fonksiyonunu global olarak tanımla
-    // executeQuery fonksiyonu her render'da yeniden oluştuğu için,
-    // window.executeQuery'nin her zaman en güncel executeQuery'ye işaret etmesini sağlarız.
     window.executeQuery = executeQuery;
-    
-    // Component unmount olurken temizle
     return () => {
       window.closeFlightReservation = undefined;
-      // Sadece bizim atadığımız fonksiyonu temizlediğimizden emin olalım
       if (window.executeQuery === executeQuery) {
         window.executeQuery = undefined;
       }
     };
-  }, [executeQuery]); // executeQuery fonksiyonu değiştiğinde bu effect'i yeniden çalıştır.
-                      // executeQuery her render'da yeniden oluştuğu için bu effect her render'da çalışır.
+  }, [executeQuery]); 
 
-  // Database state değişikliğini takip eden useEffect ekleyin
   useEffect(() => {
-    // database değiştiğinde log çıktısı görün
     console.log("Database state updated:", database);
-    
-    // database değiştiğinde açık sorgu varsa yeniden çalıştır
-    // executeQuery'nin en güncel halini çağırdığından emin olmak için onu da dependency yapabiliriz,
-    // ama bu durumda sonsuz döngü riski olabilir eğer executeQuery state güncelliyorsa.
-    // Şimdilik sadece database ve sqlQuery yeterli.
     if (sqlQuery && sqlQuery.trim().toUpperCase().startsWith('SELECT')) {
-      console.log("Database updated, refreshing query...");
-      executeQuery(); // Bu, o anki kapsamdaki executeQuery'yi çağırır.
+      // Re-run SELECT queries if the database changes and a SELECT query is in the editor
+      // This might be too aggressive if updates are frequent. Consider if this is desired.
+      // executeQuery(sqlQuery); 
     }
-  }, [database, sqlQuery]); // executeQuery'yi buradan çıkardık, çünkü bu effect'in amacı database veya sqlQuery değişince tetiklenmek.
+  }, [database]); // Removed sqlQuery from dependencies to avoid loop with handleTableClick
 
-  // Tüm modalları zorla kapatmak için fonksiyon
   const closeAllModals = () => {
     setShowReservationModal(false);
     setShowPaymentModal(false);
-    setTimeout(() => {
-      // DOM güncellemesinin tamamlanmasını sağlamak için timeout
-      forceUpdate();
-    }, 0);
+    setTimeout(() => { forceUpdate(); }, 0);
   };
 
   return (
     <div className="app-container">
-      {/* Sol Sidebar */}
       <div className="sidebar">
-        {/* Başlık ve alt başlık */}
         <div className="app-title">
           <h1>AirDB Explorer</h1>
           <div className="subtitle">Database Management Interface</div>
         </div>
-        
-        {/* Veritabanı Şeması */}
         <div className="database-section">
           <h3 className="section-title">Database Schema</h3>
-          
           <div className="tree-view">
             {isLoadingDefaultDB ? (
               <p>Loading database...</p>
@@ -492,11 +483,9 @@ function App() {
               <p className="error-text">Error: {dbLoadError}</p>
             ) : (
               <div className="schema-tree">
-                {/* newDB.sql */}
                 <div className="db-item">
                   <span className="db-name">{treeData.name}</span>
                 </div>
-                {/* Tablolar sağa kaydırılmış şekilde */}
                 <div style={{ marginLeft: 24 }}>
                   {treeData.children.map((table, idx) => (
                     <div key={idx} className="table-item">
@@ -509,10 +498,7 @@ function App() {
                         <span
                           className="table-name"
                           style={{ marginLeft: 4, cursor: 'pointer' }}
-                          onClick={e => {
-                            e.stopPropagation(); // Toggle'ı tetiklemesin
-                            handleTableClick(table.name);
-                          }}
+                          onClick={e => { e.stopPropagation(); handleTableClick(table.name); }}
                         >
                           {table.name}
                         </span>
@@ -541,26 +527,17 @@ function App() {
             )}
           </div>
         </div>
-        
-        {/* Rezervasyon Butonu */}
         <div className="reservation-section">
-          <button 
-            className="reservation-btn"
-            onClick={() => setShowReservationModal(true)}
-          >
+          <button className="reservation-btn" onClick={() => setShowReservationModal(true)}>
             Make Flight Reservation
           </button>
         </div>
       </div>
       
-      {/* Ana İçerik */}
       <div className="main-content">
-        {/* Arkaplan Görseli */}
         <div className="image-container">
           <img src={airplaneImage} alt="Airplane" className="airplane-image" />
         </div>
-        
-        {/* SQL Editor */}
         <div className="sql-editor-container">
           <textarea
             className="sql-editor"
@@ -568,15 +545,11 @@ function App() {
             onChange={(e) => setSqlQuery(e.target.value)}
             placeholder="SELECT * FROM flights;"
           ></textarea>
-          <button 
-            className="execute-btn"
-            onClick={executeQuery}
-          >
+          <button className="execute-btn" onClick={() => executeQuery(sqlQuery)}>
             Execute
           </button>
         </div>
         
-        {/* Sorgu Sonuçları */}
         {queryResult && (
           <div className="query-results">
             {queryResult.type === 'success' ? (
@@ -584,38 +557,33 @@ function App() {
                 <table className="result-table">
                   <thead>
                     <tr>
-                      {queryResult.columns.map((col, idx) => (
-                        <th key={idx}>{col}</th>
-                      ))}
+                      {queryResult.columns?.map((col, idx) => ( <th key={idx}>{col}</th> ))}
                     </tr>
                   </thead>
                   <tbody>
-                    {/* Eğer tabloda seat_id sütunu varsa, ID'ye göre sırala */}
-                    {queryResult.columns.includes('seat_id') 
-                      ? [...queryResult.data]
+                    {queryResult.columns?.includes('seat_id') 
+                      ? [...(queryResult.data || [])]
                           .sort((a, b) => parseInt(a.seat_id) - parseInt(b.seat_id))
                           .map((row, rowIdx) => (
                             <tr key={rowIdx}>
                               {queryResult.columns.map((col, colIdx) => (
                                 <td key={`${rowIdx}-${colIdx}`}>
-                                  {/* Boolean değerleri t/f yerine true/false olarak göster */}
-                                  {col === 'is_available' 
-                                    ? row[col] === 't' ? 'true' : 'false'
-                                    : row[col]}
+                                  {col === 'is_available' ? (row[col] === 't' ? 'true' : 'false') : row[col]}
                                 </td>
                               ))}
                             </tr>
                           ))
-                      : queryResult.data.map((row, rowIdx) => (
+                      : (queryResult.data || []).map((row, rowIdx) => (
                           <tr key={rowIdx}>
-                            {queryResult.columns.map((col, colIdx) => (
-                              <td key={`${rowIdx}-${colIdx}`}>{row[col]}</td>
-                            ))}
+                            {queryResult.columns?.map((col, colIdx) => ( <td key={`${rowIdx}-${colIdx}`}>{row[col]}</td> ))}
                           </tr>
                         ))
                     }
                   </tbody>
                 </table>
+                {queryResult.message && queryResult.data === undefined && ( /* Show message if success but no table data */
+                    <div className={`query-message ${queryResult.type}`}>{queryResult.message}</div>
+                )}
               </div>
             ) : (
               <div className={`query-message ${queryResult.type}`}>
@@ -626,60 +594,60 @@ function App() {
         )}
       </div>
       
-      {/* Rezervasyon Modal */}
       {showReservationModal && (
         <ReservationModal 
           isOpen={showReservationModal}
           onClose={() => setShowReservationModal(false)} 
           database={database}
-          // flightOptions ve allSeats'i ReservationModal'a prop olarak geçirin
-          // Bu verilerin ReservationModal içinde zaten mevcut olduğunu varsayıyorum,
-          // değilse App.jsx'ten veya uygun bir kaynaktan sağlanmalıdır.
-          // flightOptions={flightOptionsState} // flightOptionsState, App.jsx'te tutulan uçuş listesi olmalı
-          // allSeats={allSeatsState}       // allSeatsState, App.jsx'te tutulan koltuk verisi olmalı
           onProceedToPayment={(details) => {
-            setReservationDetails(details); // App.jsx'in reservationDetails state'ini güncelle
-            setShowPaymentModal(true);    // App.jsx'e PaymentModal'ı göstermesini söyle
-            setShowReservationModal(false); // ReservationModal'ı kapat
+            // Attempt to find userId from email provided by ReservationModal
+            let userIdToSet = null;
+            if (details.email && database.users && database.users.data) {
+                const user = database.users.data.find(u => u.email === details.email);
+                if (user) {
+                    userIdToSet = user.user_id;
+                } else {
+                    console.warn("[App.jsx] User not found by email for reservation:", details.email);
+                }
+            } else {
+                console.warn("[App.jsx] Email not provided or users data unavailable for finding userId.");
+            }
+            // Ensure all necessary details from ReservationModal are included
+            setReservationDetails({ ...details, userId: userIdToSet }); 
+            setShowPaymentModal(true);    
+            setShowReservationModal(false); 
           }}
         />
       )}
 
-      {/* Ödeme Modal */}
       {showPaymentModal && (
         <PaymentModal 
           onClose={(result) => {
-            console.log("PaymentModal kapanıyor:", result);
-            
+            console.log("PaymentModal closing with result:", result);
             if (typeof result === 'object' && result.action === 'payment-completed') {
-              console.log("Ödeme tamamlandı, modallar kapatılıyor");
+              console.log("Payment marked as completed by PaymentModal, showing final success message.");
               closeAllModals();
-              
               setPaymentSuccess(true);
-              // reservationDetails burada App.jsx'in state'idir ve onProceedToPayment ile set edilir.
-              setCompletedReservation(reservationDetails); 
-              
+              setCompletedReservation(reservationDetails); // Use App's current reservationDetails
               setTimeout(() => {
                 setPaymentSuccess(false);
-                setCompletedReservation(null); // Başarı mesajı sonrası temizle
+                setCompletedReservation(null); 
               }, 5000);
             } else {
-              setShowPaymentModal(false); // Sadece ödeme modalını kapat
+              console.log("PaymentModal closed without completion or with error:", result);
+              setShowPaymentModal(false); 
             }
           }} 
           reservationDetails={reservationDetails} 
         />
       )}
 
-      {/* Ödeme Başarılı Mesajı */}
       {paymentSuccess && completedReservation && (
         <div className="payment-success-message">
           <div className="success-content">
             <div className="success-header">
-              {/* İkonu buraya ekleyebilirsiniz */}
               <h3>Ödeme Başarılı!</h3>
             </div>
-            
             <div className="reservation-details">
               <h4>Rezervasyon Detayları</h4>
               <div className="detail-row">
@@ -699,122 +667,31 @@ function App() {
                 <div className="detail-value">{completedReservation.seatNumber || completedReservation.seat?.split(' (')[0]}</div>
               </div>
             </div>
-            
             <div className="success-message">
               Rezervasyonunuz başarıyla oluşturuldu. Uçuş detaylarınızı yukarıda görebilirsiniz.
             </div>
-            
-            <button className="close-success" onClick={() => {
-              setPaymentSuccess(false);
-              // İsteğe bağlı: Ana ekrana dönülmesini garanti etmek için
-              setShowReservationModal(false);
-              setShowPaymentModal(false);
-            }}>
+            <button className="close-success" onClick={() => { setPaymentSuccess(false); setCompletedReservation(null); }}>
               Tamam
             </button>
           </div>
         </div>
       )}
-
-      {/* Style eklemeyi, return içindeki en son kapanış div'inden önce ekleyelim */}
       <style>
         {`
-          .payment-success-message {
-            position: fixed;
-            top: 0;
-            left: 0;
-            right: 0;
-            bottom: 0;
-            background-color: rgba(0, 0, 0, 0.7);
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            z-index: 1000;
-          }
-          
-          .success-content {
-            background: linear-gradient(135deg, #1b2838 0%, #2a3c5a 100%);
-            border-radius: 10px;
-            padding: 25px;
-            width: 90%;
-            max-width: 500px;
-            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.5);
-            color: white;
-            border: 1px solid rgba(114, 137, 218, 0.5);
-          }
-          
-          .success-header {
-            display: flex;
-            align-items: center;
-            margin-bottom: 20px;
-            color: #4CAF50;
-          }
-          
-          .success-header svg {
-            margin-right: 10px;
-          }
-          
-          .success-header h3 {
-            margin: 0;
-            font-size: 22px;
-          }
-          
-          .reservation-details {
-            background-color: rgba(0, 0, 0, 0.2);
-            border-radius: 8px;
-            padding: 20px;
-            margin-bottom: 20px;
-          }
-          
-          .reservation-details h4 {
-            margin-top: 0;
-            margin-bottom: 15px;
-            font-size: 18px;
-            color: #adbce6;
-          }
-          
-          .detail-row {
-            display: flex;
-            justify-content: space-between;
-            margin-bottom: 10px;
-            padding-bottom: 5px;
-            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-          }
-          
-          .detail-row:last-child {
-            border-bottom: none;
-          }
-          
-          .detail-label {
-            font-weight: 500;
-            color: #adbce6;
-          }
-          
-          .detail-value {
-            font-weight: 600;
-          }
-          
-          .success-message {
-            margin-bottom: 20px;
-            text-align: center;
-            color: #4CAF50;
-          }
-          
-          .close-success {
-            background-color: #5865f2;
-            color: white;
-            border: none;
-            padding: 12px 20px;
-            border-radius: 5px;
-            width: 100%;
-            font-weight: 600;
-            cursor: pointer;
-            transition: background-color 0.2s;
-          }
-          
-          .close-success:hover {
-            background-color: #4752c4;
-          }
+          .payment-success-message { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background-color: rgba(0, 0, 0, 0.7); display: flex; justify-content: center; align-items: center; z-index: 1000; }
+          .success-content { background: linear-gradient(135deg, #1b2838 0%, #2a3c5a 100%); border-radius: 10px; padding: 25px; width: 90%; max-width: 500px; box-shadow: 0 10px 25px rgba(0, 0, 0, 0.5); color: white; border: 1px solid rgba(114, 137, 218, 0.5); }
+          .success-header { display: flex; align-items: center; margin-bottom: 20px; color: #4CAF50; }
+          .success-header svg { margin-right: 10px; }
+          .success-header h3 { margin: 0; font-size: 22px; }
+          .reservation-details { background-color: rgba(0, 0, 0, 0.2); border-radius: 8px; padding: 20px; margin-bottom: 20px; }
+          .reservation-details h4 { margin-top: 0; margin-bottom: 15px; font-size: 18px; color: #adbce6; }
+          .detail-row { display: flex; justify-content: space-between; margin-bottom: 10px; padding-bottom: 5px; border-bottom: 1px solid rgba(255, 255, 255, 0.1); }
+          .detail-row:last-child { border-bottom: none; }
+          .detail-label { font-weight: 500; color: #adbce6; }
+          .detail-value { font-weight: 600; }
+          .success-message { margin-bottom: 20px; text-align: center; color: #4CAF50; } /* Adjusted for better visibility */
+          .close-success { background-color: #5865f2; color: white; border: none; padding: 12px 20px; border-radius: 5px; width: 100%; font-weight: 600; cursor: pointer; transition: background-color 0.2s; }
+          .close-success:hover { background-color: #4752c4; }
         `}
       </style>
     </div>

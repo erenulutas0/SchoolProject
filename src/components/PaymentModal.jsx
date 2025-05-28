@@ -24,8 +24,9 @@ const MasterCardSVG = (
 // Banka transfer simgesi için basit SVG
 const bankLogo = "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgd2lkdGg9IjMwcHgiIGhlaWdodD0iMzBweCI+PGcgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjZmZmZmZmIiBzdHJva2Utd2lkdGg9IjEuNSIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIiBzdHJva2UtbGluZWpvaW49InJvdW5kIj48cGF0aCBkPSJNMiAyMGgxOSIvPjxwYXRoIGQ9Ik0yIDEwbDEwLTdsMTAgN3YySDJ6Ii8+PHBhdGggZD0iTTQgMTJ2NiIvPjxwYXRoIGQ9Ik0xOCAxMnY2Ii8+PHBhdGggZD0iTTExIDEydjYiLz48L2c+PC9zdmc+";
 
-const PaymentModal = ({ onClose, reservationDetails }) => {
-  const [activePaymentMethod, setActivePaymentMethod] = useState('credit-card');
+const PaymentModal = ({ onClose, reservationDetails, database, setDatabase }) => {
+  const [activePaymentMethod, setActivePaymentMethod] = useState('credit-card'); // Varsayılan ödeme yöntemi
+  const [failedMethod, setFailedMethod] = useState('credit_card'); // Varsayılan failedMethod
   const [paymentComplete, setPaymentComplete] = useState(false);
   const [loading, setLoading] = useState(false);
   
@@ -520,175 +521,137 @@ const processPayment = async (method) => {
     onClose({ action: 'payment-completed', paymentMethod: selectedPaymentMethod }); // Kullanıcının seçtiği ödeme yöntemi
   };
 
+  const handleClose = () => {
+    if (reservationDetails) {
+      const now = new Date();
+      const currentTimestamp = `${now.getFullYear()}-${(now.getMonth() + 1)
+        .toString().padStart(2, '0')}-${now.getDate().toString().padStart(2, '0')} ${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}:${now.getSeconds().toString().padStart(2, '0')}`;
+
+      // bookings tablosunun son satırındaki booking_id'yi al
+      const lastBookingId = database.bookings?.data?.[database.bookings.data.length - 1]?.booking_id || null;
+
+      // TL sembolünü kaldır ve sayıya dönüştür
+      const amount = parseFloat(reservationDetails.totalPrice?.replace('₺', '').trim()) || 0;
+
+      const failedPayment = {
+        payment_id: (database.payments?.data?.length || 0) + 1, // Yeni payment_id
+        booking_id: lastBookingId, // Son booking_id'yi kullan
+        amount: amount.toFixed(2), // Sayıyı iki ondalık basamakla formatla
+        payment_time: currentTimestamp,
+        method: failedMethod, // failedMethod'u kullan
+        status: 'failed' // Status "failed" olarak ayarlanır
+      };
+
+      const updatedPaymentsData = [...(database.payments?.data || []), failedPayment];
+      const updatedDatabase = {
+        ...database,
+        payments: {
+          columns: database.payments?.columns || [
+            { name: 'payment_id', type: 'SERIAL PRIMARY KEY' },
+            { name: 'booking_id', type: 'INTEGER' },
+            { name: 'amount', type: 'DECIMAL(10,2)' },
+            { name: 'payment_time', type: 'TIMESTAMP' },
+            { name: 'method', type: 'VARCHAR(30)' },
+            { name: 'status', type: 'VARCHAR(20)' }
+          ],
+          data: updatedPaymentsData
+        }
+      };
+
+      setDatabase(updatedDatabase);
+      console.log("Payment marked as failed and added to payments table:", failedPayment);
+    }
+
+    onClose(); // Modal'ı kapat
+  };
+
+  // Ödeme yöntemi değiştiğinde çağrılan fonksiyon
+  const updatePaymentMethod = (method) => {
+    setActivePaymentMethod(method);
+
+    // failedMethod'u seçilen ödeme yöntemine göre güncelle
+    if (method === 'credit-card') {
+      setFailedMethod('credit_card');
+    } else if (method === 'paypal') {
+      setFailedMethod('paypal');
+    } else if (method === 'bank-transfer') {
+      setFailedMethod('bank_transfer');
+    }
+  };
+
   return (
     <div className="payment-modal" style={{ zIndex: 1000 }}>
       <div className="payment-content">
         <div className="payment-header">
           <h2>Payment Information</h2>
-          <button className="close-btn" onClick={onClose}>&times;</button>
+          <button className="close-btn" onClick={handleClose}>&times;</button>
         </div>
         
         <div className="payment-body">
-          {/* Ödeme özeti */}
-          <div className="payment-summary">
-            <h3>Reservation Summary</h3>
-            <div className="summary-detail">
-              <div className="summary-label">Flight:</div>
-              <div className="summary-value">{reservationDetails?.flight || 'TK100 - Dalaman → İstanbul'}</div>
+          <h3 style={{ marginBottom: '15px' }}>Payment Method</h3>
+          <div className="payment-methods" style={{
+            display: 'flex',
+            justifyContent: 'space-between',
+            marginBottom: '20px'
+          }}>
+            <div 
+              className={`payment-method ${activePaymentMethod === 'credit-card' ? 'active' : ''}`}
+              onClick={() => updatePaymentMethod('credit-card')}
+              style={{
+                flex: 1,
+                padding: '15px 10px',
+                borderRadius: '8px',
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                cursor: 'pointer',
+                border: activePaymentMethod === 'credit-card' ? '2px solid #ff9800' : '1px solid rgba(255, 255, 255, 0.2)',
+                backgroundColor: activePaymentMethod === 'credit-card' ? 'rgba(255, 152, 0, 0.1)' : 'transparent',
+                margin: '0 5px'
+              }}
+            >
+              Credit Card
             </div>
-            <div className="summary-detail">
-              <div className="summary-label">Date:</div>
-              <div className="summary-value">{reservationDetails?.date || '01.06.2025'}</div>
+            <div 
+              className={`payment-method ${activePaymentMethod === 'paypal' ? 'active' : ''}`}
+              onClick={() => updatePaymentMethod('paypal')}
+              style={{
+                flex: 1,
+                padding: '15px 10px',
+                borderRadius: '8px',
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                cursor: 'pointer',
+                border: activePaymentMethod === 'paypal' ? '2px solid #0070ba' : '1px solid rgba(255, 255, 255, 0.2)',
+                backgroundColor: activePaymentMethod === 'paypal' ? 'rgba(0, 112, 186, 0.1)' : 'transparent',
+                margin: '0 5px'
+              }}
+            >
+              PayPal
             </div>
-            <div className="summary-detail">
-              <div className="summary-label">Passenger:</div>
-              <div className="summary-value">{reservationDetails?.passenger || 'Eren'}</div>
-            </div>
-            <div className="summary-detail">
-              <div className="summary-label">Seat:</div>
-              <div className="summary-value">{reservationDetails?.seat || 'A5 (First Class)'}</div>
-            </div>
-            <div className="summary-detail">
-              <div className="summary-label">Total Amount:</div>
-              <div className="summary-value">{reservationDetails?.totalPrice || '1500₺'}</div>
+            <div 
+              className={`payment-method ${activePaymentMethod === 'bank-transfer' ? 'active' : ''}`}
+              onClick={() => updatePaymentMethod('bank-transfer')}
+              style={{
+                flex: 1,
+                padding: '15px 10px',
+                borderRadius: '8px',
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                cursor: 'pointer',
+                border: activePaymentMethod === 'bank-transfer' ? '2px solid #4caf50' : '1px solid rgba(255, 255, 255, 0.2)',
+                backgroundColor: activePaymentMethod === 'bank-transfer' ? 'rgba(76, 175, 80, 0.1)' : 'transparent',
+                margin: '0 5px'
+              }}
+            >
+              Bank Transfer
             </div>
           </div>
           
           {!paymentComplete && (
             <>
-              <h3 style={{ marginBottom: '15px' }}>Payment Method</h3>
-              <div className="payment-methods" style={{
-                display: 'flex',
-                justifyContent: 'space-between',
-                marginBottom: '20px'
-              }}>
-                <div 
-                  className={`payment-method ${activePaymentMethod === 'credit-card' ? 'active' : ''}`}
-                  onClick={() => setActivePaymentMethod('credit-card')}
-                  style={{
-                    flex: 1,
-                    padding: '15px 10px',
-                    borderRadius: '8px',
-                    display: 'flex',
-                    flexDirection: 'column',
-                    alignItems: 'center',
-                    cursor: 'pointer',
-                    border: activePaymentMethod === 'credit-card' ? '2px solid #ff9800' : '1px solid rgba(255, 255, 255, 0.2)',
-                    backgroundColor: activePaymentMethod === 'credit-card' ? 'rgba(255, 152, 0, 0.1)' : 'transparent',
-                    margin: '0 5px'
-                  }}
-                >
-                  {/* Kart logolarını yan yana net bir şekilde göster */}
-                  <div style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    gap: '10px',
-                    width: '100%',
-                    height: '40px'
-                  }}>
-                    {/* Logoların sırasını değiştirdik: Önce MasterCard, sonra VISA */}
-                    {/* MasterCard logosu için daha iyi kontrast sağlayan bir konteyner */}
-                    <div style={{ 
-                      height: '30px', 
-                      width: '45px', 
-                      background: '#ffffff', 
-                      borderRadius: '4px', 
-                      padding: '2px', 
-                      display: 'flex', 
-                      alignItems: 'center', 
-                      justifyContent: 'center',
-                      boxShadow: '0 1px 3px rgba(0,0,0,0.2)'
-                    }}>
-                      <div style={{ height: '26px', width: '40px' }}>
-                        {MasterCardSVG}
-                      </div>
-                    </div>
-                    
-                    {/* VISA logosu için daha iyi kontrast sağlayan bir konteyner */}
-                    <div style={{ 
-                      height: '30px', 
-                      width: '45px', 
-                      background: '#ffffff', 
-                      borderRadius: '4px', 
-                      padding: '2px', 
-                      display: 'flex', 
-                      alignItems: 'center', 
-                      justifyContent: 'center',
-                      boxShadow: '0 1px 3px rgba(0,0,0,0.2)'
-                    }}>
-                      <div style={{ height: '26px', width: '40px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                        {/* Kart üzerindeki ile aynı VISA sembolünü kullanıyoruz */}
-                        <img 
-                          src="https://upload.wikimedia.org/wikipedia/commons/thumb/5/5e/Visa_Inc._logo.svg/800px-Visa_Inc._logo.svg.png" 
-                          alt="Visa" 
-                          style={{
-                            width: '100%',
-                            height: '100%',
-                            objectFit: 'contain'
-                          }}
-                        />
-                      </div>
-                    </div>
-                  </div>
-                  <div className="payment-method-name" style={{
-                    marginTop: '5px',
-                    fontWeight: activePaymentMethod === 'credit-card' ? 'bold' : 'normal',
-                    color: activePaymentMethod === 'credit-card' ? '#ff9800' : '#fff'
-                  }}>Credit Card</div>
-                </div>
-                <div 
-                  className={`payment-method ${activePaymentMethod === 'paypal' ? 'active' : ''}`}
-                  onClick={() => setActivePaymentMethod('paypal')}
-                  style={{
-                    flex: 1,
-                    padding: '15px 10px',
-                    borderRadius: '8px',
-                    display: 'flex',
-                    flexDirection: 'column',
-                    alignItems: 'center',
-                    cursor: 'pointer',
-                    border: activePaymentMethod === 'paypal' ? '2px solid #0070ba' : '1px solid rgba(255, 255, 255, 0.2)',
-                    backgroundColor: activePaymentMethod === 'paypal' ? 'rgba(0, 112, 186, 0.1)' : 'transparent',
-                    margin: '0 5px'
-                  }}
-                >
-                  <img
-                    src="https://upload.wikimedia.org/wikipedia/commons/b/b5/PayPal.svg"
-                    alt="PayPal"
-                    style={{ width: 50, height: 50, objectFit: 'contain', background: '#fff', borderRadius: 4, padding: 2 }}
-                  />
-                  <div className="payment-method-name" style={{
-                    marginTop: '5px',
-                    fontWeight: activePaymentMethod === 'paypal' ? 'bold' : 'normal',
-                    color: activePaymentMethod === 'paypal' ? '#0070ba' : '#fff'
-                  }}>PayPal</div>
-                </div>
-                <div 
-                  className={`payment-method ${activePaymentMethod === 'bank-transfer' ? 'active' : ''}`}
-                  onClick={() => setActivePaymentMethod('bank-transfer')}
-                  style={{
-                    flex: 1,
-                    padding: '15px 10px',
-                    borderRadius: '8px',
-                    display: 'flex',
-                    flexDirection: 'column',
-                    alignItems: 'center',
-                    cursor: 'pointer',
-                    border: activePaymentMethod === 'bank-transfer' ? '2px solid #4caf50' : '1px solid rgba(255, 255, 255, 0.2)',
-                    backgroundColor: activePaymentMethod === 'bank-transfer' ? 'rgba(76, 175, 80, 0.1)' : 'transparent',
-                    margin: '0 5px'
-                  }}
-                >
-                  <img src={bankLogo} alt="Havale/EFT" style={{ width: 40, height: 40 }} />
-                  <div className="payment-method-name" style={{
-                    marginTop: '5px',
-                    fontWeight: activePaymentMethod === 'bank-transfer' ? 'bold' : 'normal',
-                    color: activePaymentMethod === 'bank-transfer' ? '#4caf50' : '#fff'
-                  }}>Bank Transfer</div>
-                </div>
-              </div>
-              
               {loading ? (
                 <div style={{
                   display: 'flex',

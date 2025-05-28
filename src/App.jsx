@@ -646,7 +646,9 @@ function App() {
               setShowPaymentModal(false); 
             }
           }} 
-          reservationDetails={reservationDetails} 
+          reservationDetails={reservationDetails}
+          database={database} // database'i props olarak geçiyoruz
+          setDatabase={setDatabase} // setDatabase fonksiyonunu props olarak geçiyoruz
         />
       )}
 

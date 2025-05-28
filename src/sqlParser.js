@@ -1,19 +1,24 @@
 // SQL dosyalarını analiz eden gelişmiş parser
 
 export function parseSQLSchema(sqlContent) {
-  // Tablo adlarını bulma - PostgreSQL formatına daha uygun
-  const tableRegex = /CREATE\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?(?:public\.)?["']?(\w+)["']?/gi;
+  // 1. Yorum satırlarını ve fazla boşlukları temizle
+  const cleanedSql = sqlContent
+    .replace(/--.*$/gm, '') // Tek satır yorumları sil
+    .replace(/\/\*[\s\S]*?\*\//g, '') // Çok satırlı yorumları sil
+    .replace(/\s+/g, ' '); // Fazla boşlukları tek boşluğa indir
+
+  // 2. CREATE TABLE ifadelerini bulmak için daha esnek bir regex
+  const tableRegex = /CREATE\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?(?:public\.)?["`']?(\w+)["`']?\s*\(/gi;
   const tables = [];
   let tableMatch;
-  
-  while ((tableMatch = tableRegex.exec(sqlContent)) !== null) {
+
+  while ((tableMatch = tableRegex.exec(cleanedSql)) !== null) {
     const tableName = tableMatch[1];
     if (tableName) {
       tables.push(tableName);
     }
   }
-  
-  console.log('Bulunan tablolar:', tables);
+
   return tables;
 }
 
@@ -63,11 +68,23 @@ function extractColumns(columnDef) {
   columnLines.forEach(line => {
     // Boş satırları atla
     if (!line) return;
+
+    // CONSTRAINT, PRIMARY KEY, FOREIGN KEY gibi satırları atla
+    if (
+      line.toUpperCase().startsWith('CONSTRAINT') ||
+      line.toUpperCase().startsWith('PRIMARY KEY') ||
+      line.toUpperCase().startsWith('FOREIGN KEY')
+    ) {
+      return;
+    }
     
     // İlk kelime sütun adıdır
-    const columnMatch = line.match(/^["']?(\w+)["']?\s+/);
+    const columnMatch = line.match(/^["']?(\w+)["']?\s+(\w+)/);
     if (columnMatch) {
-      columns.push(columnMatch[1]);
+      columns.push({
+        name: columnMatch[1],
+        type: columnMatch[2]
+      });
     }
   });
   

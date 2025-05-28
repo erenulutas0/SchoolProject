@@ -37,6 +37,7 @@ function App() {
   const [reservationDetails, setReservationDetails] = useState(null);
   const [paymentSuccess, setPaymentSuccess] = useState(false);
   const [completedReservation, setCompletedReservation] = useState(null);
+  const [showResults, setShowResults] = useState(false); // Tablo görünürlüğü için state
 
   // Tüm modalları sıfırlamak için forceUpdate
   const [, forceUpdate] = useReducer(x => x + 1, 0);
@@ -467,6 +468,10 @@ function App() {
     setTimeout(() => { forceUpdate(); }, 0);
   };
 
+  const handleCloseResultsTable = () => {
+    setQueryResult(null);
+  };
+
   return (
     <div className="app-container">
       <div className="sidebar">
@@ -552,6 +557,9 @@ function App() {
         
         {queryResult && (
           <div className="query-results">
+            <button onClick={handleCloseResultsTable} className="close-results-btn">
+              ×
+            </button>
             {queryResult.type === 'success' ? (
               <div className="result-table-container">
                 <table className="result-table">
@@ -692,6 +700,60 @@ function App() {
           .success-message { margin-bottom: 20px; text-align: center; color: #4CAF50; } /* Adjusted for better visibility */
           .close-success { background-color: #5865f2; color: white; border: none; padding: 12px 20px; border-radius: 5px; width: 100%; font-weight: 600; cursor: pointer; transition: background-color 0.2s; }
           .close-success:hover { background-color: #4752c4; }
+
+          .query-results {
+            position: relative; /* Kapatma düğmesinin konumlandırılması için */
+            /* Mevcut diğer stilleriniz burada kalabilir */
+            display: flex; /* Flexbox'ı etkinleştir */
+            flex-direction: column; /* Çocukları dikey olarak sırala */
+            max-height: calc(100vh - 250px); /* Örnek bir maksimum yükseklik, sql editör ve diğer elemanlara göre ayarlayın */
+          }
+          .result-table-container {
+            overflow-y: auto; /* Dikey kaydırmayı etkinleştir */
+            flex-grow: 1; /* Kalan alanı doldurmasını sağla */
+            border: 1px solid #333; /* Kenarlık ekleyelim */
+            border-radius: 4px; /* Köşeleri yuvarlayalım */
+          }
+          .result-table {
+            width: 100%;
+            border-collapse: collapse;
+          }
+          .result-table th, .result-table td {
+            border: 1px solid #444;
+            padding: 8px 12px;
+            text-align: left;
+            white-space: nowrap; /* Hücre içeriğinin tek satırda kalmasını sağlar */
+          }
+          .result-table thead th {
+            position: sticky;
+            top: 0;
+            background-color: #2a3c5a; /* Arka plan rengi, temanıza uygun seçin */
+            color: white;
+            z-index: 1; /* Diğer içeriklerin üzerinde kalmasını sağlar */
+          }
+          .close-results-btn {
+            position: absolute;
+            top: 8px; /* Konumu biraz ayarlayalım */
+            left: 8px; /* Konumu biraz ayarlayalım */
+            background-color: rgba(40, 40, 40, 0.6); /* Koyu yarı saydam arka plan */
+            color: white;
+            border: none;
+            border-radius: 50%; /* Tamamen yuvarlak köşeler (dairesel) */
+            width: 22px; /* Genişlik */
+            height: 22px; /* Yükseklik */
+            padding: 0; /* İç boşluğu sıfırla, boyut width/height ile kontrol edilecek */
+            cursor: pointer;
+            font-size: 14px; /* '×' karakteri için font boyutu */
+            font-weight: bold;
+            z-index: 10; /* Diğer içeriklerin üzerinde olmasını sağlar */
+            display: flex; /* İçeriği ortalamak için flexbox */
+            align-items: center; /* Dikey ortalama */
+            justify-content: center; /* Yatay ortalama */
+            transition: background-color 0.2s ease; /* Yumuşak geçiş efekti */
+          }
+          .close-results-btn:hover {
+            background-color: rgba(20, 20, 20, 0.8); /* Hover durumunda daha koyu arka plan */
+          }
         `}
       </style>
     </div>

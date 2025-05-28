@@ -6,7 +6,8 @@
 
 body {
   font-family: 'Inter', sans-serif;
-  background-color: #1a1a2e;
+  background: url('./assets/background.gif') no-repeat center center fixed;
+  background-size: cover;
   color: white;
 }
 
@@ -579,6 +580,7 @@ body {
   justify-content: center;
   align-items: center;
   z-index: 2000;
+  overflow-y: auto; /* Kaydırma çubuğu ekleyelim */
 }
 
 .payment-content {
@@ -588,6 +590,26 @@ body {
   border-radius: 8px;
   overflow: hidden;
   box-shadow: 0 5px 20px rgba(0, 0, 0, 0.5);
+  margin: 20px 0; /* Mobil cihazlarda daha iyi görünüm için */
+}
+
+.payment-body {
+  max-height: 70vh; /* Yüksekliği sınırlayalım */
+  overflow-y: auto; /* İçerik kaydırılabilir olsun */
+}
+
+@media (max-width: 768px) {
+  .payment-content {
+    max-width: 90%; /* Daha küçük ekranlar için genişliği azaltalım */
+  }
+
+  .payment-methods {
+    flex-direction: column; /* Ödeme yöntemlerini dikey hizalayalım */
+  }
+
+  .payment-method {
+    margin-bottom: 10px; /* Dikey boşluk ekleyelim */
+  }
 }
 
 .payment-header {
